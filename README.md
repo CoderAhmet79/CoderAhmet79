@@ -1,6 +1,6 @@
 - 👋 Hi, I’m @CoderAhmet79
-- 👀 I’m interested in <react props={nextJS} />
-- 🌱 I’m currently learning <always/>
+- 👀 I’m interested in react props={nextJS} 
+- 🌱 I’m currently learning always
 - 💞️ I’m looking to collaborate on ...
 - 📫 How to reach me <tahmet@yahoo.com/>
 - 😄 Pronouns: ...
