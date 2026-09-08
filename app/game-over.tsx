@@ -1,6 +1,8 @@
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
+import { Celebration } from '../src/components/Celebration';
 import { tr } from '../src/i18n/tr';
 import { useGameStore } from '../src/store/gameStore';
 import { useTheme } from '../src/theme/useTheme';
@@ -9,6 +11,7 @@ export default function GameOverScreen() {
   const theme = useTheme();
   const state = useGameStore((s) => s.state);
   const resetGame = useGameStore((s) => s.resetGame);
+  const [showCelebration, setShowCelebration] = useState(true);
 
   if (!state) {
     return (
@@ -30,9 +33,6 @@ export default function GameOverScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.table }]}>
       <Text style={[styles.title, { color: theme.text }]}>{tr.gameOver.title}</Text>
-      {humanWon ? (
-        <Text style={[styles.congrats, { color: theme.accent }]}>{tr.gameOver.congrats(winner.player.name)}</Text>
-      ) : null}
 
       <View style={[styles.rankCard, { backgroundColor: theme.surface }]}>
         {ranking.map((row, i) => (
@@ -62,6 +62,14 @@ export default function GameOverScreen() {
       >
         <Text style={[styles.buttonOutlineText, { color: theme.text }]}>{tr.gameOver.mainMenu}</Text>
       </TouchableOpacity>
+
+      {humanWon && showCelebration ? (
+        <Celebration
+          playerName={winner.player.name}
+          score={winner.total}
+          onFinished={() => setShowCelebration(false)}
+        />
+      ) : null}
     </View>
   );
 }
@@ -77,11 +85,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '700',
-  },
-  congrats: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 8,
   },
   rankCard: {
     width: '100%',
