@@ -40,10 +40,10 @@ function buildAgent(level: SeatLevel, rng: Rng): Agent {
   return createAgent(level, rng);
 }
 
-function playGame(
+async function playGame(
   seed: number,
   levels: [SeatLevel, SeatLevel, SeatLevel, SeatLevel],
-): GameState {
+): Promise<GameState> {
   let state = createGame(defaultRuleSet, seed);
   const agents = levels.map((level, i) => buildAgent(level, createRng(seed * 7919 + i * 104729 + 1)));
   state = nextHand(state);
@@ -51,15 +51,16 @@ function playGame(
   while (state.phase !== 'GAME_OVER') {
     const declarer = state.hand!.declarer;
     const options = availableContracts(state, declarer);
-    const contract = agents[declarer].chooseContract(publicView(state, declarer), options);
+    const contract = await agents[declarer].chooseContract(publicView(state, declarer), options);
     state = chooseContract(state, contract);
     if (state.phase === 'CHOOSE_TRUMP') {
-      state = chooseTrump(state, agents[declarer].chooseTrump(publicView(state, declarer)));
+      const suit = await agents[declarer].chooseTrump(publicView(state, declarer));
+      state = chooseTrump(state, suit);
     }
     while (state.phase === 'PLAYING') {
       const player = state.hand!.turn;
       const legal = legalPlays(state, player);
-      const card = agents[player].chooseCard(publicView(state, player), legal);
+      const card = await agents[player].chooseCard(publicView(state, player), legal);
       state = playCard(state, player, card);
     }
     state = nextHand(state);
@@ -102,7 +103,7 @@ function emptyContractCounts(): Record<Contract, number> {
   };
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const { games, seed, levels } = parseArgs();
   const contractCounts = emptyContractCounts();
   const totalsSum = [0, 0, 0, 0];
@@ -110,7 +111,7 @@ function main(): void {
 
   for (let i = 0; i < games; i++) {
     const gameSeed = seed + i;
-    const state = playGame(gameSeed, levels);
+    const state = await playGame(gameSeed, levels);
     const total = state.totals.reduce((a, b) => a + b, 0);
     const ok = total === 0 && state.scoreTable.length === 20;
     if (!ok) {
@@ -147,4 +148,7 @@ function main(): void {
   }
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exitCode = 1;
+});

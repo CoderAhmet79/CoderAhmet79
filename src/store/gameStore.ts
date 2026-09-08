@@ -1,3 +1,4 @@
+import { InteractionManager } from 'react-native';
 import { create } from 'zustand';
 
 import { Agent, AgentLevel, createAgent } from '../ai/agent';
@@ -19,12 +20,12 @@ import { useStatsStore } from './statsStore';
 
 export const HUMAN_PLAYER: PlayerId = 0;
 
-// Bilgisayarın "düşünme süresi": kartlar birbirine yapışık atılmasın diye.
-// HARD adım 8'de gerçek PIMC hesap süresine göre güncellenecek.
-const THINK_MS: Record<AgentLevel, [number, number]> = {
-  MEDIUM: [400, 700],
-  HARD: [500, 900],
-};
+// Bilgisayarın "düşünme süresi": MEDIUM anında karar verir, bu yüzden
+// kartlar birbirine yapışık atılmasın diye yapay bir bekleme uygulanır.
+// HARD'ın kendi PIMC hesabı zaten gerçek süreyi alır; yalnızca bir alt
+// sınır (en az görünür süre) uygulanır.
+const MEDIUM_THINK_MS: [number, number] = [400, 700];
+const HARD_MIN_VISIBLE_MS = 500;
 
 const SPEED_MULTIPLIER: Record<AnimationSpeed, number> = {
   slow: 1.6,
@@ -32,17 +33,33 @@ const SPEED_MULTIPLIER: Record<AnimationSpeed, number> = {
   fast: 0.6,
 };
 
-function randomDelay(level: AgentLevel): number {
-  const [min, max] = THINK_MS[level];
-  const speed = useSettingsStore.getState().settings.animationSpeed;
-  const multiplier = SPEED_MULTIPLIER[speed];
-  return (min + Math.random() * (max - min)) * multiplier;
+function speedMultiplier(): number {
+  return SPEED_MULTIPLIER[useSettingsStore.getState().settings.animationSpeed];
 }
 
-function buildAgents(level: AgentLevel, seed: number): Partial<Record<PlayerId, Agent>> {
+function mediumThinkDelay(): number {
+  const [min, max] = MEDIUM_THINK_MS;
+  return (min + Math.random() * (max - min)) * speedMultiplier();
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
+}
+
+// HARD'ın hesaplaması sürerken dokunma/animasyon tepkiselliğini bozmasın
+// diye, bekleyen etkileşimler bitene kadar başlatılmasını erteler.
+function runAfterInteractions<T>(fn: () => Promise<T> | T): Promise<T> {
+  return new Promise((resolve, reject) => {
+    InteractionManager.runAfterInteractions(() => {
+      Promise.resolve(fn()).then(resolve, reject);
+    });
+  });
+}
+
+function buildAgents(level: AgentLevel, seed: number, ruleSet: RuleSet): Partial<Record<PlayerId, Agent>> {
   const agents: Partial<Record<PlayerId, Agent>> = {};
   ([1, 2, 3] as PlayerId[]).forEach((id, i) => {
-    agents[id] = createAgent(level, createRng(seed + (i + 1) * 97));
+    agents[id] = createAgent(level, createRng(seed + (i + 1) * 97), ruleSet);
   });
   return agents;
 }
@@ -86,39 +103,58 @@ export const useGameStore = create<GameStore>((set, get) => {
       const declarer = state.hand!.declarer;
       if (declarer === HUMAN_PLAYER) return;
       const phaseAtSchedule = state.phase;
-      setTimeout(() => {
-        const current = get().state;
-        if (!current || current.phase !== phaseAtSchedule) return;
+
+      runAfterInteractions(async () => {
+        const before = get().state;
+        if (!before || before.phase !== phaseAtSchedule) return;
         const agent = get().agents[declarer];
         if (!agent) return;
+        const start = Date.now();
+
         if (phaseAtSchedule === 'CHOOSE_CONTRACT') {
-          const options = availableContracts(current, declarer);
-          const contract = agent.chooseContract(publicView(current, declarer), options);
-          applyState(engineChooseContract(current, contract));
+          const options = availableContracts(before, declarer);
+          const contract = await agent.chooseContract(publicView(before, declarer), options);
+          if (level === 'MEDIUM') await wait(mediumThinkDelay());
+          else await wait(HARD_MIN_VISIBLE_MS * speedMultiplier() - (Date.now() - start));
+          const latest = get().state;
+          if (!latest || latest.phase !== 'CHOOSE_CONTRACT' || latest.hand?.declarer !== declarer) return;
+          applyState(engineChooseContract(latest, contract));
         } else {
-          const suit = agent.chooseTrump(publicView(current, declarer));
-          applyState(engineChooseTrump(current, suit));
+          const suit = await agent.chooseTrump(publicView(before, declarer));
+          if (level === 'MEDIUM') await wait(mediumThinkDelay());
+          else await wait(HARD_MIN_VISIBLE_MS * speedMultiplier() - (Date.now() - start));
+          const latest = get().state;
+          if (!latest || latest.phase !== 'CHOOSE_TRUMP') return;
+          applyState(engineChooseTrump(latest, suit));
         }
         scheduleAI();
-      }, randomDelay(level));
+      });
       return;
     }
 
     if (state.phase === 'PLAYING') {
       const turn = state.hand!.turn;
       if (turn === HUMAN_PLAYER) return;
-      setTimeout(() => {
-        const current = get().state;
-        if (!current || current.phase !== 'PLAYING') return;
-        const player = current.hand!.turn;
+
+      runAfterInteractions(async () => {
+        const before = get().state;
+        if (!before || before.phase !== 'PLAYING') return;
+        const player = before.hand!.turn;
         if (player === HUMAN_PLAYER) return;
         const agent = get().agents[player];
         if (!agent) return;
-        const legal = legalPlays(current, player);
-        const card = agent.chooseCard(publicView(current, player), legal);
-        applyState(enginePlayCard(current, player, card));
+
+        const start = Date.now();
+        const legal = legalPlays(before, player);
+        const card = await agent.chooseCard(publicView(before, player), legal);
+        if (level === 'MEDIUM') await wait(mediumThinkDelay());
+        else await wait(HARD_MIN_VISIBLE_MS * speedMultiplier() - (Date.now() - start));
+
+        const latest = get().state;
+        if (!latest || latest.phase !== 'PLAYING' || latest.hand!.turn !== player) return;
+        applyState(enginePlayCard(latest, player, card));
         scheduleAI();
-      }, randomDelay(level));
+      });
     }
   }
 
@@ -135,15 +171,16 @@ export const useGameStore = create<GameStore>((set, get) => {
         { id: 2, name: playerNames[2].trim() || 'Ayşe', isHuman: false },
         { id: 3, name: playerNames[3].trim() || 'Selim', isHuman: false },
       ];
-      let state = createGame(ruleSet ?? defaultRuleSet, seed, players);
+      const resolvedRuleSet = ruleSet ?? defaultRuleSet;
+      let state = createGame(resolvedRuleSet, seed, players);
       state = engineNextHand(state);
-      set({ state, level, agents: buildAgents(level, seed) });
+      set({ state, level, agents: buildAgents(level, seed, resolvedRuleSet) });
       saveGame(state, level);
       scheduleAI();
     },
 
     loadGame: (state, level) => {
-      set({ state, level, agents: buildAgents(level, state.seed) });
+      set({ state, level, agents: buildAgents(level, state.seed, state.ruleSet) });
       scheduleAI();
     },
 

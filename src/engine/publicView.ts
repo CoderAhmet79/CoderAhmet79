@@ -54,6 +54,28 @@ function computeVoidSuits(hand: HandState): Record<PlayerId, Suit[]> {
   return result;
 }
 
+// Bir HandState'ten, belirtilen oyuncunun görebileceği alt kümeyi çıkarır.
+// GameState gerektirmez — HARD ajanın PIMC simülasyonu (bkz. src/ai/sampler.ts)
+// varsayımsal (örneklenmiş) eller üzerinde de bu görünümü üretebilsin diye
+// publicView()'dan ayrı, doğrudan dışa açılır.
+export function publicHandView(hand: HandState, player: PlayerId): PublicHandView {
+  const handSizes = hand.hands.map((h) => h.length) as [number, number, number, number];
+  return {
+    handNo: hand.handNo,
+    dealer: hand.dealer,
+    declarer: hand.declarer,
+    contract: hand.contract,
+    trumpSuit: hand.trumpSuit,
+    myHand: hand.hands[player],
+    handSizes,
+    currentTrick: hand.currentTrick,
+    completedTricks: hand.completedTricks,
+    turn: hand.turn,
+    finished: hand.finished,
+    voidSuits: computeVoidSuits(hand),
+  };
+}
+
 // AI ve UI, oyuncunun görebileceği her şeyi bu görünümden alır; tam
 // GameState'e (diğer oyuncuların elleri dahil) erişemez.
 export function publicView(state: GameState, player: PlayerId): PublicState {
@@ -72,24 +94,5 @@ export function publicView(state: GameState, player: PlayerId): PublicState {
     return { ...base, hand: null };
   }
 
-  const hand = state.hand;
-  const handSizes = hand.hands.map((h) => h.length) as [number, number, number, number];
-
-  return {
-    ...base,
-    hand: {
-      handNo: hand.handNo,
-      dealer: hand.dealer,
-      declarer: hand.declarer,
-      contract: hand.contract,
-      trumpSuit: hand.trumpSuit,
-      myHand: hand.hands[player],
-      handSizes,
-      currentTrick: hand.currentTrick,
-      completedTricks: hand.completedTricks,
-      turn: hand.turn,
-      finished: hand.finished,
-      voidSuits: computeVoidSuits(hand),
-    },
-  };
+  return { ...base, hand: publicHandView(state.hand, player) };
 }
