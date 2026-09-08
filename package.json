@@ -37,7 +37,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "test": "jest",
-    "selfplay": "ts-node scripts/selfplay.ts"
+    "selfplay": "TS_NODE_PROJECT=tsconfig.node.json ts-node --transpile-only scripts/selfplay.ts"
   },
   "private": true
 }
