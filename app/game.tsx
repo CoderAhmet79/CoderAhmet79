@@ -10,7 +10,7 @@ import { OpponentSeat } from '../src/components/OpponentSeat';
 import { ScoreTable } from '../src/components/ScoreTable';
 import { TableCenter } from '../src/components/TableCenter';
 import { TopBar } from '../src/components/TopBar';
-import { availableContracts, legalPlays } from '../src/engine/game';
+import { availableContracts, canClaimRemainingTricks, legalPlays } from '../src/engine/game';
 import { scoreHand } from '../src/engine/scoring';
 import { PlayerId } from '../src/engine/types';
 import { tr } from '../src/i18n/tr';
@@ -25,6 +25,7 @@ export default function GameScreen() {
   const chooseContract = useGameStore((s) => s.chooseContract);
   const chooseTrump = useGameStore((s) => s.chooseTrump);
   const playCard = useGameStore((s) => s.playCard);
+  const claimRemainingTricks = useGameStore((s) => s.claimRemainingTricks);
   const continueAfterHandOver = useGameStore((s) => s.continueAfterHandOver);
   const [scoreTableVisible, setScoreTableVisible] = useState(false);
   const [lastTrickVisible, setLastTrickVisible] = useState(false);
@@ -80,6 +81,11 @@ export default function GameScreen() {
   const legal = phase === 'PLAYING' && hand.turn === HUMAN_PLAYER ? legalPlays(state, HUMAN_PLAYER) : [];
   const liveScores = hand.contract ? scoreHand(hand) : [0, 0, 0, 0];
   const lastCompletedTrick = hand.completedTricks.length > 0 ? hand.completedTricks[hand.completedTricks.length - 1] : null;
+  const claimAvailable =
+    phase === 'PLAYING' &&
+    hand.turn === HUMAN_PLAYER &&
+    hand.currentTrick.plays.length === 0 &&
+    canClaimRemainingTricks(state, HUMAN_PLAYER);
 
   function isSeatTurn(id: PlayerId): boolean {
     return hand.turn === id && (phase === 'PLAYING' || phase === 'CHOOSE_CONTRACT');
@@ -118,6 +124,14 @@ export default function GameScreen() {
       </View>
 
       <View style={styles.bottomArea}>
+        {claimAvailable ? (
+          <View style={styles.claimBanner}>
+            <Text style={[styles.claimText, { color: theme.accent }]}>{tr.table.claimAvailable}</Text>
+            <TouchableOpacity style={[styles.claimButton, { backgroundColor: theme.accent }]} onPress={claimRemainingTricks}>
+              <Text style={[styles.claimButtonText, { color: theme.table }]}>{tr.table.claimButton}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
         <View style={styles.utilityRow}>
           <TouchableOpacity
             style={[styles.scoreButton, { backgroundColor: theme.surface, opacity: lastCompletedTrick ? 1 : 0.4 }]}
@@ -218,6 +232,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   bottomArea: {},
+  claimBanner: {
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  claimText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  claimButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 24,
+    borderRadius: 20,
+  },
+  claimButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
   utilityRow: {
     flexDirection: 'row',
     justifyContent: 'center',

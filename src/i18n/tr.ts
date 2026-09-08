@@ -20,6 +20,8 @@ export const tr = {
   },
   table: {
     handLabel: (handNo: number, total: number) => `El ${handNo}/${total}`,
+    claimAvailable: 'Kalan eller garanti!',
+    claimButton: 'Kalan Elleri Talep Et',
   },
   contracts: {
     NO_TRICKS: 'El Almaz',

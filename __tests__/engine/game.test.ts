@@ -1,8 +1,10 @@
 import { containsCard } from '../../src/engine/cards';
 import {
   availableContracts,
+  canClaimRemainingTricks,
   chooseContract,
   chooseTrump,
+  claimRemainingTricks,
   createGame,
   dealHand,
   legalPlays,
@@ -11,6 +13,7 @@ import {
 } from '../../src/engine/game';
 import { createRng, Rng } from '../../src/engine/rng';
 import { defaultRuleSet, GameState, Suit } from '../../src/engine/types';
+import { card } from '../../test-utils/engineFixtures';
 
 describe('createGame + dealHand', () => {
   it('deals 13 cards to each of the 4 players and enters CHOOSE_CONTRACT', () => {
@@ -193,5 +196,77 @@ describe('full random game playthrough', () => {
       expect(containsCard(state.hand!.hands[player], chosen)).toBe(true);
       state = playCard(state, player, chosen);
     }
+  });
+});
+
+describe('canClaimRemainingTricks / claimRemainingTricks', () => {
+  function buildForcedWinState(candidate: 0 | 1 | 2 | 3 = 0): GameState {
+    const base = createGame(defaultRuleSet, 1);
+    const hands: [ReturnType<typeof card>[], ReturnType<typeof card>[], ReturnType<typeof card>[], ReturnType<typeof card>[]] = [
+      [],
+      [],
+      [],
+      [],
+    ];
+    hands[candidate] = [card('S', 14), card('S', 13)];
+    const others = ([0, 1, 2, 3] as const).filter((p) => p !== candidate);
+    hands[others[0]] = [card('H', 2), card('H', 3)];
+    hands[others[1]] = [card('H', 4), card('H', 5)];
+    hands[others[2]] = [card('H', 6), card('H', 7)];
+
+    return {
+      ...base,
+      phase: 'PLAYING',
+      hand: {
+        handNo: 1,
+        dealer: 3,
+        declarer: candidate,
+        contract: 'TRUMP',
+        trumpSuit: 'S',
+        hands,
+        currentTrick: { leader: candidate, plays: [] },
+        completedTricks: [],
+        turn: candidate,
+        finished: false,
+        handScores: [0, 0, 0, 0],
+      },
+    };
+  }
+
+  it('is true only for the player who can force the win', () => {
+    const state = buildForcedWinState(0);
+    expect(canClaimRemainingTricks(state, 0)).toBe(true);
+    expect(canClaimRemainingTricks(state, 1)).toBe(false);
+    expect(canClaimRemainingTricks(state, 2)).toBe(false);
+  });
+
+  it('scores +50 per remaining trick for the claimant, clears all hands, and ends the hand', () => {
+    const state = buildForcedWinState(0);
+    const next = claimRemainingTricks(state, 0);
+    expect(next.phase).toBe('HAND_OVER');
+    expect(next.hand!.finished).toBe(true);
+    expect(next.hand!.hands.every((h) => h.length === 0)).toBe(true);
+    expect(next.hand!.completedTricks).toHaveLength(2);
+    expect(next.hand!.handScores).toEqual([100, 0, 0, 0]);
+    expect(next.totals).toEqual([100, 0, 0, 0]);
+    expect(next.scoreTable).toHaveLength(1);
+    expect(next.scoreTable[0].scores).toEqual([100, 0, 0, 0]);
+  });
+
+  it('throws for a player who cannot force the win', () => {
+    const state = buildForcedWinState(0);
+    expect(() => claimRemainingTricks(state, 1)).toThrow();
+  });
+
+  it('is false mid-trick, even for the eventual forced winner', () => {
+    const state = buildForcedWinState(0);
+    const midTrick: GameState = {
+      ...state,
+      hand: {
+        ...state.hand!,
+        currentTrick: { leader: 0, plays: [{ player: 0, card: card('S', 14) }] },
+      },
+    };
+    expect(canClaimRemainingTricks(midTrick, 0)).toBe(false);
   });
 });

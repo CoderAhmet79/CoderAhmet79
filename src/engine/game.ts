@@ -1,4 +1,5 @@
 import { isSameCard } from './cards';
+import { findForcedWinner } from './claim';
 import { dealCards } from './deck';
 import { createRng } from './rng';
 import { determineTrickWinner, isHandFinished, legalPlaysInHand } from './rules';
@@ -162,6 +163,35 @@ function removeCardFromHand(hand: HandState, player: PlayerId, card: Card): Hand
   return { ...hand, hands };
 }
 
+// Biten bir el için skoru hesaplar, toplamları günceller ve skor tablosuna
+// bir satır ekler. `hand.finished` zaten true olmalı.
+function finalizeHand(state: GameState, hand: HandState): GameState {
+  const handScores = scoreHand(hand);
+  const finishedHand = { ...hand, handScores };
+  const totals: [number, number, number, number] = [
+    state.totals[0] + handScores[0],
+    state.totals[1] + handScores[1],
+    state.totals[2] + handScores[2],
+    state.totals[3] + handScores[3],
+  ];
+  const scoreRow: HandScoreRow = {
+    handNo: finishedHand.handNo,
+    contract: finishedHand.contract!,
+    declarer: finishedHand.declarer,
+    trumpSuit: finishedHand.trumpSuit,
+    scores: handScores,
+    cumulative: totals,
+  };
+
+  return {
+    ...state,
+    hand: finishedHand,
+    totals,
+    scoreTable: [...state.scoreTable, scoreRow],
+    phase: 'HAND_OVER',
+  };
+}
+
 export function playCard(state: GameState, player: PlayerId, card: Card): GameState {
   if (!state.hand) throw new Error('Sürmekte olan bir el yok');
   if (state.phase !== 'PLAYING') throw new Error('Şu anda kart oynanamaz');
@@ -199,32 +229,40 @@ export function playCard(state: GameState, player: PlayerId, card: Card): GameSt
     };
   }
 
-  if (!hand.finished) {
-    return { ...state, hand };
+  return hand.finished ? finalizeHand(state, hand) : { ...state, hand };
+}
+
+// Koz elinde, sırası gelen oyuncu (bir trick'in başında) rakipler ne
+// oynarsa oynasın kalan tüm trickleri kazanmayı garanti edebiliyorsa true
+// döner — bkz. claim.ts. Yalnızca `player`in sırası geldiğinde anlamlıdır.
+export function canClaimRemainingTricks(state: GameState, player: PlayerId): boolean {
+  if (!state.hand || state.phase !== 'PLAYING') return false;
+  if (state.hand.turn !== player) return false;
+  return findForcedWinner(state.hand, state.ruleSet) === player;
+}
+
+// Garantiyi doğrular ve kalan tüm trickleri `player`e yazarak eli hemen
+// bitirir — kartlar tek tek oynanmaz, kartlar `player`in gerçek elinden
+// alınır (uydurma veri yok), yalnızca karşı taraf oynatılmaz.
+export function claimRemainingTricks(state: GameState, player: PlayerId): GameState {
+  if (!canClaimRemainingTricks(state, player)) {
+    throw new Error(`Oyuncu ${player} kalan elleri talep edemez`);
   }
+  const hand = state.hand!;
+  const claimedTricks: Trick[] = hand.hands[player].map((card) => ({
+    leader: player,
+    winner: player,
+    plays: [{ player, card }],
+  }));
 
-  const handScores = scoreHand(hand);
-  hand = { ...hand, handScores };
-  const totals: [number, number, number, number] = [
-    state.totals[0] + handScores[0],
-    state.totals[1] + handScores[1],
-    state.totals[2] + handScores[2],
-    state.totals[3] + handScores[3],
-  ];
-  const scoreRow: HandScoreRow = {
-    handNo: hand.handNo,
-    contract: hand.contract!,
-    declarer: hand.declarer,
-    trumpSuit: hand.trumpSuit,
-    scores: handScores,
-    cumulative: totals,
+  const finishedHand: HandState = {
+    ...hand,
+    hands: [[], [], [], []],
+    currentTrick: { leader: player, plays: [] },
+    completedTricks: [...hand.completedTricks, ...claimedTricks],
+    turn: player,
+    finished: true,
   };
 
-  return {
-    ...state,
-    hand,
-    totals,
-    scoreTable: [...state.scoreTable, scoreRow],
-    phase: 'HAND_OVER',
-  };
+  return finalizeHand(state, finishedHand);
 }

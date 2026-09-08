@@ -77,6 +77,19 @@ Kurallar:
 - Renk yoksa **koz atmak zorunludur** (`mustTrumpWhenVoid`, varsayılan: açık — ayar olarak değiştirilebilir).
 - Koz ile başlamak serbesttir.
 
+**Kalan elleri talep etme ("claim"):** V1 sonrası eklendi, yalnızca Koz
+kontratında geçerlidir (ceza ellerinde yok). Bir trick'in başında (henüz
+kimse kart atmamışken), o an sırası gelen oyuncu — rakipler ne oynarsa
+oynasın — kalan **tüm** trickleri kazanmayı garanti edebiliyorsa el, kalan
+kartlar tek tek oynanmadan biter; kalan her trick +50 olarak o oyuncuya
+yazılır. Motor bunu, o ana kadar dağıtılmış dört eli de tam bilerek
+(double-dummy) doğrular — hiçbir zaman yanlış-pozitif üretmez, yalnızca
+hesap çok pahalıysa (kalan el sayısı `MAX_SEARCH_TRICKS`'i aşarsa) sunmaz.
+İnsan oyuncu için bu bir **öneridir**: masada bir buton belirir, dokunmazsa
+el normal oynanmaya devam eder. Bilgisayar oyuncular tespit edince otomatik
+talep eder. Bkz. `src/engine/claim.ts` (`findForcedWinner`) ve
+`src/engine/game.ts` (`canClaimRemainingTricks`, `claimRemainingTricks`).
+
 ### 3.5 Skor
 - 20 el sonunda cezalar toplamı -5200, kozlar toplamı +5200 → oyun sıfır toplamlıdır.
 - Skor tablosu 20 satır × 4 sütun; her satırda kontrat adı, seçen oyuncu, 4 puan ve kümülatif toplam.

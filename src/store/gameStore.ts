@@ -4,8 +4,10 @@ import { create } from 'zustand';
 import { Agent, AgentLevel, createAgent } from '../ai/agent';
 import {
   availableContracts,
+  canClaimRemainingTricks,
   chooseContract as engineChooseContract,
   chooseTrump as engineChooseTrump,
+  claimRemainingTricks as engineClaimRemainingTricks,
   createGame,
   legalPlays,
   nextHand as engineNextHand,
@@ -78,6 +80,7 @@ type GameStore = {
   chooseContract: (contract: Contract) => void;
   chooseTrump: (suit: Suit) => void;
   playCard: (card: Card) => void;
+  claimRemainingTricks: () => void;
   continueAfterHandOver: () => void;
   resetGame: () => void;
 };
@@ -144,6 +147,18 @@ export const useGameStore = create<GameStore>((set, get) => {
         const agent = get().agents[player];
         if (!agent) return;
 
+        // Koz elinde, rakipler ne oynarsa oynasın kalan tüm trickleri
+        // kazanmak garantiyse bilgisayar kalan eli tek tek oynamak yerine
+        // otomatik talep eder.
+        if (canClaimRemainingTricks(before, player)) {
+          await wait(mediumThinkDelay());
+          const latest = get().state;
+          if (!latest || latest.phase !== 'PLAYING' || latest.hand!.turn !== player) return;
+          applyState(engineClaimRemainingTricks(latest, player));
+          scheduleAI();
+          return;
+        }
+
         const start = Date.now();
         const legal = legalPlays(before, player);
         const card = await agent.chooseCard(publicView(before, player), legal);
@@ -202,6 +217,13 @@ export const useGameStore = create<GameStore>((set, get) => {
       const { state } = get();
       if (!state) return;
       applyState(enginePlayCard(state, HUMAN_PLAYER, card));
+      scheduleAI();
+    },
+
+    claimRemainingTricks: () => {
+      const { state } = get();
+      if (!state || !canClaimRemainingTricks(state, HUMAN_PLAYER)) return;
+      applyState(engineClaimRemainingTricks(state, HUMAN_PLAYER));
       scheduleAI();
     },
 
