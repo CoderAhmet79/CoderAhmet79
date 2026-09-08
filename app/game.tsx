@@ -1,10 +1,11 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, BackHandler, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ContractSheet, TrumpSheet } from '../src/components/ContractSheet';
 import { Hand } from '../src/components/Hand';
+import { LastTrickPopover } from '../src/components/LastTrickPopover';
 import { OpponentSeat } from '../src/components/OpponentSeat';
 import { ScoreTable } from '../src/components/ScoreTable';
 import { TableCenter } from '../src/components/TableCenter';
@@ -26,6 +27,7 @@ export default function GameScreen() {
   const playCard = useGameStore((s) => s.playCard);
   const continueAfterHandOver = useGameStore((s) => s.continueAfterHandOver);
   const [scoreTableVisible, setScoreTableVisible] = useState(false);
+  const [lastTrickVisible, setLastTrickVisible] = useState(false);
   const [triedResume, setTriedResume] = useState(false);
 
   useEffect(() => {
@@ -41,6 +43,21 @@ export default function GameScreen() {
       setTriedResume(true);
     });
   }, [state, triedResume, loadGame]);
+
+  // Geri tuşu: sürmekte olan bir el varken doğrudan çıkışı engelle, onay iste.
+  // İlerleme zaten her hamlede otomatik kaydedildiği için "Devam Et" ile geri
+  // dönülebilir.
+  useEffect(() => {
+    if (!state?.hand || state.phase === 'GAME_OVER') return undefined;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      Alert.alert(tr.exitConfirm.title, tr.exitConfirm.message, [
+        { text: tr.exitConfirm.cancel, style: 'cancel' },
+        { text: tr.exitConfirm.confirm, style: 'destructive', onPress: () => router.replace('/') },
+      ]);
+      return true;
+    });
+    return () => sub.remove();
+  }, [state?.hand, state?.phase]);
 
   if (!state || !state.hand) {
     return (
@@ -61,6 +78,7 @@ export default function GameScreen() {
   const myHand = hand.hands[HUMAN_PLAYER];
   const legal = state.phase === 'PLAYING' && hand.turn === HUMAN_PLAYER ? legalPlays(state, HUMAN_PLAYER) : [];
   const liveScores = hand.contract ? scoreHand(hand) : [0, 0, 0, 0];
+  const lastCompletedTrick = hand.completedTricks.length > 0 ? hand.completedTricks[hand.completedTricks.length - 1] : null;
 
   const seatOrder: PlayerId[] = [1, 2, 3];
 
@@ -83,9 +101,18 @@ export default function GameScreen() {
       <TableCenter hand={hand} myId={HUMAN_PLAYER} />
 
       <View style={styles.bottomArea}>
-        <TouchableOpacity style={[styles.scoreButton, { backgroundColor: theme.surface }]} onPress={() => setScoreTableVisible(true)}>
-          <Text style={[styles.scoreButtonText, { color: theme.text }]}>{tr.scoreTable.title}</Text>
-        </TouchableOpacity>
+        <View style={styles.utilityRow}>
+          <TouchableOpacity
+            style={[styles.scoreButton, { backgroundColor: theme.surface, opacity: lastCompletedTrick ? 1 : 0.4 }]}
+            disabled={!lastCompletedTrick}
+            onPress={() => setLastTrickVisible(true)}
+          >
+            <Text style={[styles.scoreButtonText, { color: theme.text }]}>Son El</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.scoreButton, { backgroundColor: theme.surface }]} onPress={() => setScoreTableVisible(true)}>
+            <Text style={[styles.scoreButtonText, { color: theme.text }]}>{tr.scoreTable.title}</Text>
+          </TouchableOpacity>
+        </View>
         <Hand
           cards={myHand}
           legal={legal}
@@ -130,6 +157,12 @@ export default function GameScreen() {
         scoreTable={state.scoreTable}
         players={state.players}
       />
+      <LastTrickPopover
+        visible={lastTrickVisible}
+        onClose={() => setLastTrickVisible(false)}
+        trick={lastCompletedTrick}
+        players={state.players}
+      />
     </SafeAreaView>
   );
 }
@@ -164,12 +197,16 @@ const styles = StyleSheet.create({
   bottomArea: {
     marginTop: 'auto',
   },
+  utilityRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
   scoreButton: {
-    alignSelf: 'center',
     paddingVertical: 6,
     paddingHorizontal: 16,
     borderRadius: 20,
-    marginBottom: 8,
   },
   scoreButtonText: {
     fontSize: 12,
