@@ -50,7 +50,7 @@ export function TableCenter({ hand, myId }: { hand: HandState; myId: PlayerId })
   }, [hand.completedTricks.length, hand.completedTricks]);
 
   const trick = frozenTrick ?? hand.currentTrick;
-  const width = cardWidthForScreen() * 0.8;
+  const width = cardWidthForScreen() * 1.5;
   const height = width * CARD_RATIO;
 
   return (
