@@ -75,30 +75,47 @@ export default function GameScreen() {
   }
 
   const hand = state.hand;
+  const phase = state.phase;
   const myHand = hand.hands[HUMAN_PLAYER];
-  const legal = state.phase === 'PLAYING' && hand.turn === HUMAN_PLAYER ? legalPlays(state, HUMAN_PLAYER) : [];
+  const legal = phase === 'PLAYING' && hand.turn === HUMAN_PLAYER ? legalPlays(state, HUMAN_PLAYER) : [];
   const liveScores = hand.contract ? scoreHand(hand) : [0, 0, 0, 0];
   const lastCompletedTrick = hand.completedTricks.length > 0 ? hand.completedTricks[hand.completedTricks.length - 1] : null;
 
-  const seatOrder: PlayerId[] = [1, 2, 3];
+  function isSeatTurn(id: PlayerId): boolean {
+    return hand.turn === id && (phase === 'PLAYING' || phase === 'CHOOSE_CONTRACT');
+  }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.table }]} edges={['left', 'right']}>
       <TopBar hand={hand} players={state.players} />
 
-      <View style={styles.opponentRow}>
-        {seatOrder.map((id) => (
-          <OpponentSeat
-            key={id}
-            player={state.players[id]}
-            score={liveScores[id]}
-            cardCount={hand.hands[id].length}
-            isTurn={hand.turn === id && (state.phase === 'PLAYING' || state.phase === 'CHOOSE_CONTRACT')}
-          />
-        ))}
+      <View style={styles.topOpponentRow}>
+        <OpponentSeat
+          player={state.players[2]}
+          score={liveScores[2]}
+          cardCount={hand.hands[2].length}
+          isTurn={isSeatTurn(2)}
+          position="top"
+        />
       </View>
 
-      <TableCenter hand={hand} myId={HUMAN_PLAYER} />
+      <View style={styles.middleRow}>
+        <OpponentSeat
+          player={state.players[1]}
+          score={liveScores[1]}
+          cardCount={hand.hands[1].length}
+          isTurn={isSeatTurn(1)}
+          position="left"
+        />
+        <TableCenter hand={hand} myId={HUMAN_PLAYER} />
+        <OpponentSeat
+          player={state.players[3]}
+          score={liveScores[3]}
+          cardCount={hand.hands[3].length}
+          isTurn={isSeatTurn(3)}
+          position="right"
+        />
+      </View>
 
       <View style={styles.bottomArea}>
         <View style={styles.utilityRow}>
@@ -189,14 +206,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
-  opponentRow: {
+  topOpponentRow: {
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  middleRow: {
+    flex: 1,
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
   },
-  bottomArea: {
-    marginTop: 'auto',
-  },
+  bottomArea: {},
   utilityRow: {
     flexDirection: 'row',
     justifyContent: 'center',

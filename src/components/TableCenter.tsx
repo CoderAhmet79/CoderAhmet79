@@ -35,7 +35,7 @@ export function TableCenter({ hand, myId }: { hand: HandState; myId: PlayerId })
   }, [hand.completedTricks.length, hand.completedTricks]);
 
   const trick = frozenTrick ?? hand.currentTrick;
-  const width = cardWidthForScreen() * 0.85;
+  const width = cardWidthForScreen() * 0.8;
 
   return (
     <View style={styles.center}>
@@ -55,8 +55,8 @@ export function TableCenter({ hand, myId }: { hand: HandState; myId: PlayerId })
 
 const styles = StyleSheet.create({
   center: {
-    width: '100%',
-    height: 180,
+    flex: 1,
+    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -67,7 +67,7 @@ const styles = StyleSheet.create({
 
 const slotStyle = StyleSheet.create({
   bottom: { bottom: 4, alignSelf: 'center' },
-  left: { left: '18%', top: '38%' },
+  left: { left: '4%', top: '38%' },
   top: { top: 4, alignSelf: 'center' },
-  right: { right: '18%', top: '38%' },
+  right: { right: '4%', top: '38%' },
 });
