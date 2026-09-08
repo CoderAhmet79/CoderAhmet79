@@ -13,6 +13,9 @@ import {
 import { publicView } from '../engine/publicView';
 import { createRng } from '../engine/rng';
 import { Card, Contract, defaultRuleSet, GameState, Player, PlayerId, RuleSet, Suit } from '../engine/types';
+import { clearSavedGame, saveGame } from './persistence';
+import { AnimationSpeed, useSettingsStore } from './settingsStore';
+import { useStatsStore } from './statsStore';
 
 export const HUMAN_PLAYER: PlayerId = 0;
 
@@ -23,9 +26,17 @@ const THINK_MS: Record<AgentLevel, [number, number]> = {
   HARD: [500, 900],
 };
 
+const SPEED_MULTIPLIER: Record<AnimationSpeed, number> = {
+  slow: 1.6,
+  normal: 1,
+  fast: 0.6,
+};
+
 function randomDelay(level: AgentLevel): number {
   const [min, max] = THINK_MS[level];
-  return min + Math.random() * (max - min);
+  const speed = useSettingsStore.getState().settings.animationSpeed;
+  const multiplier = SPEED_MULTIPLIER[speed];
+  return (min + Math.random() * (max - min)) * multiplier;
 }
 
 function buildAgents(level: AgentLevel, seed: number): Partial<Record<PlayerId, Agent>> {
@@ -55,6 +66,18 @@ type GameStore = {
 };
 
 export const useGameStore = create<GameStore>((set, get) => {
+  // Her hamleden sonra tek giriş noktası: state'i uygular, otomatik kaydeder
+  // ve oyun bittiyse istatistiğe yazıp kayıtlı oyunu temizler.
+  function applyState(next: GameState) {
+    set({ state: next });
+    if (next.phase === 'GAME_OVER') {
+      useStatsStore.getState().recordGame(next);
+      clearSavedGame();
+    } else {
+      saveGame(next, get().level);
+    }
+  }
+
   function scheduleAI() {
     const { state, level } = get();
     if (!state) return;
@@ -71,10 +94,10 @@ export const useGameStore = create<GameStore>((set, get) => {
         if (phaseAtSchedule === 'CHOOSE_CONTRACT') {
           const options = availableContracts(current, declarer);
           const contract = agent.chooseContract(publicView(current, declarer), options);
-          set({ state: engineChooseContract(current, contract) });
+          applyState(engineChooseContract(current, contract));
         } else {
           const suit = agent.chooseTrump(publicView(current, declarer));
-          set({ state: engineChooseTrump(current, suit) });
+          applyState(engineChooseTrump(current, suit));
         }
         scheduleAI();
       }, randomDelay(level));
@@ -93,7 +116,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         if (!agent) return;
         const legal = legalPlays(current, player);
         const card = agent.chooseCard(publicView(current, player), legal);
-        set({ state: enginePlayCard(current, player, card) });
+        applyState(enginePlayCard(current, player, card));
         scheduleAI();
       }, randomDelay(level));
     }
@@ -115,6 +138,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       let state = createGame(ruleSet ?? defaultRuleSet, seed, players);
       state = engineNextHand(state);
       set({ state, level, agents: buildAgents(level, seed) });
+      saveGame(state, level);
       scheduleAI();
     },
 
@@ -126,28 +150,28 @@ export const useGameStore = create<GameStore>((set, get) => {
     chooseContract: (contract) => {
       const { state } = get();
       if (!state) return;
-      set({ state: engineChooseContract(state, contract) });
+      applyState(engineChooseContract(state, contract));
       scheduleAI();
     },
 
     chooseTrump: (suit) => {
       const { state } = get();
       if (!state) return;
-      set({ state: engineChooseTrump(state, suit) });
+      applyState(engineChooseTrump(state, suit));
       scheduleAI();
     },
 
     playCard: (card) => {
       const { state } = get();
       if (!state) return;
-      set({ state: enginePlayCard(state, HUMAN_PLAYER, card) });
+      applyState(enginePlayCard(state, HUMAN_PLAYER, card));
       scheduleAI();
     },
 
     continueAfterHandOver: () => {
       const { state } = get();
       if (!state) return;
-      set({ state: engineNextHand(state) });
+      applyState(engineNextHand(state));
       scheduleAI();
     },
 

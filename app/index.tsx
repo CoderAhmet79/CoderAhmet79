@@ -1,17 +1,25 @@
 import { StatusBar } from 'expo-status-bar';
 import { Link } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { tr } from '../src/i18n/tr';
+import { hasSavedGame } from '../src/store/persistence';
 import { useTheme } from '../src/theme/useTheme';
 
 export default function MainMenu() {
   const theme = useTheme();
+  const [canContinue, setCanContinue] = useState(false);
+
+  useEffect(() => {
+    hasSavedGame().then(setCanContinue);
+  }, []);
+
   return (
     <View style={[styles.container, { backgroundColor: theme.table }]}>
       <Text style={[styles.title, { color: theme.text }]}>{tr.appName}</Text>
       <MenuLink href="/new-game" label={tr.menu.newGame} />
-      <MenuLink href="/game" label={tr.menu.continueGame} />
+      {canContinue ? <MenuLink href="/game" label={tr.menu.continueGame} /> : null}
       <MenuLink href="/stats" label={tr.menu.stats} />
       <MenuLink href="/settings" label={tr.menu.settings} />
       <MenuLink href="/theme" label={tr.menu.theme} />

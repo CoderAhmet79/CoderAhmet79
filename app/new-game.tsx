@@ -5,11 +5,13 @@ import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 
 import { AgentLevel } from '../src/ai/agent';
 import { tr } from '../src/i18n/tr';
 import { useGameStore } from '../src/store/gameStore';
+import { useSettingsStore } from '../src/store/settingsStore';
 import { useTheme } from '../src/theme/useTheme';
 
 export default function NewGameScreen() {
   const theme = useTheme();
   const startNewGame = useGameStore((s) => s.startNewGame);
+  const ruleSet = useSettingsStore((s) => s.settings.ruleSet);
   const [level, setLevel] = useState<AgentLevel>('MEDIUM');
   const [playerName, setPlayerName] = useState('');
   const [opponent1, setOpponent1] = useState('');
@@ -20,6 +22,7 @@ export default function NewGameScreen() {
     startNewGame({
       level,
       playerNames: [playerName || 'Sen', opponent1 || 'Kemal', opponent2 || 'Ayşe', opponent3 || 'Selim'],
+      ruleSet,
     });
     router.replace('/game');
   }

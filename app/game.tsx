@@ -14,16 +14,19 @@ import { scoreHand } from '../src/engine/scoring';
 import { PlayerId } from '../src/engine/types';
 import { tr } from '../src/i18n/tr';
 import { HUMAN_PLAYER, useGameStore } from '../src/store/gameStore';
+import { loadSavedGame } from '../src/store/persistence';
 import { useTheme } from '../src/theme/useTheme';
 
 export default function GameScreen() {
   const theme = useTheme();
   const state = useGameStore((s) => s.state);
+  const loadGame = useGameStore((s) => s.loadGame);
   const chooseContract = useGameStore((s) => s.chooseContract);
   const chooseTrump = useGameStore((s) => s.chooseTrump);
   const playCard = useGameStore((s) => s.playCard);
   const continueAfterHandOver = useGameStore((s) => s.continueAfterHandOver);
   const [scoreTableVisible, setScoreTableVisible] = useState(false);
+  const [triedResume, setTriedResume] = useState(false);
 
   useEffect(() => {
     if (state?.phase === 'GAME_OVER') {
@@ -31,13 +34,25 @@ export default function GameScreen() {
     }
   }, [state?.phase]);
 
+  useEffect(() => {
+    if (state || triedResume) return;
+    loadSavedGame().then((saved) => {
+      if (saved) loadGame(saved.state, saved.level);
+      setTriedResume(true);
+    });
+  }, [state, triedResume, loadGame]);
+
   if (!state || !state.hand) {
     return (
       <View style={[styles.empty, { backgroundColor: theme.table }]}>
-        <Text style={[styles.emptyText, { color: theme.text }]}>Sürmekte olan bir oyun yok.</Text>
-        <TouchableOpacity style={[styles.emptyButton, { backgroundColor: theme.accent }]} onPress={() => router.replace('/new-game')}>
-          <Text style={[styles.emptyButtonText, { color: theme.table }]}>{tr.menu.newGame}</Text>
-        </TouchableOpacity>
+        <Text style={[styles.emptyText, { color: theme.text }]}>
+          {triedResume ? 'Sürmekte olan bir oyun yok.' : 'Yükleniyor…'}
+        </Text>
+        {triedResume ? (
+          <TouchableOpacity style={[styles.emptyButton, { backgroundColor: theme.accent }]} onPress={() => router.replace('/new-game')}>
+            <Text style={[styles.emptyButtonText, { color: theme.table }]}>{tr.menu.newGame}</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     );
   }
