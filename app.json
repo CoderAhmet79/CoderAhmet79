@@ -12,6 +12,7 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.coderahmet79.rifki",
       "adaptiveIcon": {
         "backgroundColor": "#1B5E3A",
         "foregroundImage": "./assets/android-icon-foreground.png",
